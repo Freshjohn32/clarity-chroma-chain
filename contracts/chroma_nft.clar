@@ -7,6 +7,8 @@
 (define-constant err-invalid-token (err u102))
 (define-constant err-listing-not-found (err u103))
 (define-constant err-batch-limit (err u104))
+(define-constant err-invalid-price (err u105))
+(define-constant err-empty-attributes (err u106))
 
 ;; Data Variables
 (define-data-var last-token-id uint u0)
@@ -46,18 +48,21 @@
                 (description (string-utf8 1024))
                 (image-uri (string-utf8 256))
                 (attributes (list 10 {trait: (string-utf8 64), value: (string-utf8 64)})))
-    (let
-        ((token-id (+ (var-get last-token-id) u1)))
-        (try! (nft-mint? chroma-nft token-id tx-sender))
-        (map-set token-metadata token-id {
-            creator: tx-sender,
-            name: name,
-            description: description,
-            image-uri: image-uri,
-            attributes: attributes
-        })
-        (var-set last-token-id token-id)
-        (ok token-id)
+    (begin
+        (asserts! (> (len attributes) u0) err-empty-attributes)
+        (let
+            ((token-id (+ (var-get last-token-id) u1)))
+            (try! (nft-mint? chroma-nft token-id tx-sender))
+            (map-set token-metadata token-id {
+                creator: tx-sender,
+                name: name,
+                description: description,
+                image-uri: image-uri,
+                attributes: attributes
+            })
+            (var-set last-token-id token-id)
+            (ok token-id)
+        )
     )
 )
 
@@ -77,25 +82,47 @@
                 (attributes (list 10 {trait: (string-utf8 64), value: (string-utf8 64)})))
     (begin
         (asserts! (<= count (var-get max-batch-size)) err-batch-limit)
+        (asserts! (> (len attributes) u0) err-empty-attributes)
         (let ((initial-id (var-get last-token-id)))
-            (fold mint-batch-item (list count) (ok initial-id))
+            (fold mint-batch-item 
+                  (list count) 
+                  (ok {
+                      id: initial-id,
+                      base-name: base-name,
+                      description: description,
+                      base-uri: base-uri,
+                      attributes: attributes
+                  }))
         )
     )
 )
 
-(define-private (mint-batch-item (index uint) (prior-result (response uint uint)))
-    (let ((prior-id (unwrap! prior-result prior-result)))
+(define-private (mint-batch-item 
+                (index uint) 
+                (prior-result (response 
+                    {
+                        id: uint,
+                        base-name: (string-utf8 256),
+                        description: (string-utf8 1024),
+                        base-uri: (string-utf8 256),
+                        attributes: (list 10 {trait: (string-utf8 64), value: (string-utf8 64)})
+                    }
+                    uint)))
+    (let ((params (unwrap! prior-result prior-result)))
         (mint-single 
-            (concat (concat base-name "#") (to-string (+ index u1)))
-            description
-            (concat base-uri (to-string (+ index u1)))
-            attributes
+            (concat (concat (get base-name params) "#") (to-string (+ index u1)))
+            (get description params)
+            (concat (get base-uri params) (to-string (+ index u1)))
+            (get attributes params)
         )
     )
 )
 
 (define-public (batch-list (token-ids (list 50 uint)) (price uint))
-    (fold list-batch-item token-ids (ok true))
+    (begin
+        (asserts! (> price u0) err-invalid-price)
+        (fold list-batch-item token-ids (ok true))
+    )
 )
 
 (define-private (list-batch-item (token-id uint) (prior-result (response bool uint)))
@@ -110,6 +137,3 @@
         )
     )
 )
-
-;; Existing functions remain unchanged...
-[rest of original contract functions]
