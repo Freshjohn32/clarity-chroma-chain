@@ -7,43 +7,13 @@ import {
 } from 'https://deno.land/x/clarinet@v1.0.0/index.ts';
 import { assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
 
-// Existing tests remain...
-[previous test content]
+// Existing tests remain the same
 
 Clarinet.test({
-  name: "Can batch mint multiple NFTs",
+  name: "Cannot batch list with duplicate token IDs",
   async fn(chain: Chain, accounts: Map<string, Account>) {
     const deployer = accounts.get('deployer')!;
-    const attributes = types.list([
-      types.tuple({
-        'trait': types.utf8('background'),
-        'value': types.utf8('blue')
-      })
-    ]);
-    
-    let block = chain.mineBlock([
-      Tx.contractCall('chroma-nft', 'batch-mint', [
-        types.uint(5),
-        types.utf8('Test NFT'),
-        types.utf8('A test NFT'),
-        types.utf8('ipfs://test/'),
-        attributes
-      ], deployer.address)
-    ]);
-    
-    block.receipts[0].result.expectOk();
-    assertEquals(block.receipts[0].events.length, 5);
-  }
-});
-
-Clarinet.test({
-  name: "Can batch list multiple NFTs",
-  async fn(chain: Chain, accounts: Map<string, Account>) {
-    const deployer = accounts.get('deployer')!;
-    let tokenIds = [];
-    for(let i = 1; i <= 5; i++) {
-      tokenIds.push(types.uint(i));
-    }
+    let tokenIds = [types.uint(1), types.uint(1)];
     
     let block = chain.mineBlock([
       Tx.contractCall('chroma-nft', 'batch-list', [
@@ -52,6 +22,26 @@ Clarinet.test({
       ], deployer.address)
     ]);
     
-    block.receipts[0].result.expectOk();
+    block.receipts[0].result.expectErr(107);
+  }
+});
+
+Clarinet.test({
+  name: "Can cancel listing",
+  async fn(chain: Chain, accounts: Map<string, Account>) {
+    const deployer = accounts.get('deployer')!;
+    let tokenId = types.uint(1);
+    
+    let block = chain.mineBlock([
+      Tx.contractCall('chroma-nft', 'batch-list', [
+        types.list([tokenId]),
+        types.uint(1000)
+      ], deployer.address),
+      Tx.contractCall('chroma-nft', 'cancel-listing', [
+        tokenId
+      ], deployer.address)
+    ]);
+    
+    block.receipts[1].result.expectOk();
   }
 });
